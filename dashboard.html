@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seed Seller V1 — Scan Dashboard</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 24px; background: #0d1117; color: #e6edf3; }
+  h1 { font-size: 1.4em; border-bottom: 2px solid #6366f1; padding-bottom: 8px; }
+  h2 { color: #6366f1; font-size: 1.1em; margin-top: 24px; }
+  .banner { padding: 16px; border-radius: 8px; margin: 16px 0; }
+  .info { background: #161b22; border: 1px solid #30363d; }
+  .warn { background: #2d1214; border: 1px solid #f85149; }
+  .success { background: #0f2417; border: 1px solid #3fb950; }
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin: 16px 0; }
+  .stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; text-align: center; }
+  .stat .num { font-size: 2em; font-weight: 700; }
+  .stat .label { color: #8b949e; font-size: 0.8em; margin-top: 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.85em; }
+  th, td { padding: 8px 12px; border-bottom: 1px solid #21262d; text-align: left; }
+  th { color: #8b949e; font-weight: 600; text-transform: uppercase; font-size: 0.75em; }
+  tr:hover { background: #161b22; }
+  .addr { font-family: 'SF Mono', Monaco, monospace; font-size: 0.8em; color: #58a6ff; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75em; font-weight: 600; }
+  .tag.buyer { background: rgba(99,102,241,0.2); color: #818cf8; }
+  .tag.seller { background: rgba(16,185,129,0.2); color: #34d399; }
+  .tag.target { background: rgba(245,158,11,0.2); color: #fbbf24; }
+  .meta { color: #8b949e; font-size: 0.85em; }
+  a { color: #58a6ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #21262d; color: #8b949e; font-size: 0.8em; }
+</style>
+</head>
+<body>
+
+<h1>🔍 Seed Seller V1 — Scan Dashboard</h1>
+<p class="meta">USDC AuthorizationWithdrawn event scanner on Base Sepolia</p>
+
+<div class="banner info" id="summary-banner">
+  <strong>掃描摘要</strong><br>
+  <span id="summary-text">載入中...</span>
+</div>
+
+<div class="stat-grid">
+  <div class="stat"><div class="num" id="total-events" style="color:#6366f1">—</div><div class="label">Total Events</div></div>
+  <div class="stat"><div class="num" id="unique-buyers" style="color:#818cf8">—</div><div class="label">Unique Buyers</div></div>
+  <div class="stat"><div class="num" id="unique-sellers" style="color:#34d399">—</div><div class="label">Unique Sellers</div></div>
+  <div class="stat"><div class="num" id="target-found" style="color:#fbbf24">—</div><div class="label">Target Seller Found</div></div>
+</div>
+
+<h2>📋 Event Log</h2>
+<table id="events-table">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Block</th>
+      <th>Time (UTC)</th>
+      <th>Buyer (AuthFrom)</th>
+      <th>Seller (AuthTo)</th>
+      <th>TX Hash</th>
+    </tr>
+  </thead>
+  <tbody id="events-body"></tbody>
+</table>
+
+<h2>🎯 Target Seller Analysis</h2>
+<div class="banner info" id="target-banner">
+  <strong>Target:</strong> <code>0x3d5de90797aca1917f38df956bf8d43956235e71</code><br>
+  <span id="target-analysis">analysing...</span>
+</div>
+
+<div class="footer">
+  Last updated: <span id="last-updated"></span> | 
+  Source: <a href="https://github.com/logout2login/x402-probe-workflow">x402-probe-workflow</a> |
+  Scanner: <a href="https://github.com/logout2login/seed-seller-v1">seed-seller-v1</a>
+</div>
+
+<script>
+const TARGET_SELLER = '0x3d5de90797aca1917f38df956bf8d43956235e71';
+const DATA_URL = 'logs/scan_found.json';
+
+fetch(DATA_URL)
+  .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+  .then(events => {
+    document.getElementById('last-updated').textContent = new Date().toISOString();
+    
+    const buyers = new Set();
+    const sellers = new Set();
+    let targetMatches = 0;
+    
+    events.forEach((e, i) => {
+      const block = parseInt(e.blockNumber, 16);
+      const ts = parseInt(e.blockTimestamp || '0x0', 16);
+      const dt = ts ? new Date(ts * 1000).toISOString().replace('T', ' ').slice(0, 19) + 'Z' : 'n/a';
+      const from = '0x' + e.topics[1].slice(26).toLowerCase();
+      const to = '0x' + e.topics[2].slice(26).toLowerCase();
+      
+      buyers.add(from);
+      sellers.add(to);
+      
+      if (from === TARGET_SELLER || to === TARGET_SELLER) targetMatches++;
+      
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${i + 1}</td>
+        <td><a href="https://sepolia.basescan.org/block/${block}" target="_blank">${block}</a></td>
+        <td>${dt}</td>
+        <td><span class="addr">${from}</span> ${from === '0xc8f87fe6fe8cda55e284e2a39bd4b8e6bf047e90' ? '<span class="tag buyer">BUYER</span>' : ''}</td>
+        <td><span class="addr">${to}</span> ${to === TARGET_SELLER ? '<span class="tag target">TARGET</span>' : ''}</td>
+        <td><a href="https://sepolia.basescan.org/tx/${e.transactionHash}" target="_blank">${e.transactionHash.slice(0, 10)}...</a></td>
+      `;
+      document.getElementById('events-body').appendChild(row);
+    });
+    
+    // Update stats
+    document.getElementById('total-events').textContent = events.length;
+    document.getElementById('unique-buyers').textContent = buyers.size;
+    document.getElementById('unique-sellers').textContent = sellers.size;
+    document.getElementById('target-found').textContent = targetMatches > 0 ? 'YES ✓' : 'NO ✗';
+    document.getElementById('target-found').style.color = targetMatches > 0 ? '#34d399' : '#f85149';
+    
+    // Update summary
+    document.getElementById('summary-text').innerHTML = `
+      Scanned <strong>${events.length}</strong> AuthorizationWithdrawn events.<br>
+      Found <strong>${buyers.size}</strong> unique buyer(s) and <strong>${sellers.size}</strong> unique seller(s).<br>
+      Target seller <code>${TARGET_SELLER.slice(0, 10)}...</code> ${targetMatches > 0 ? 'found' : 'not found'} in scan results.
+    `;
+    
+    // Target analysis
+    document.getElementById('target-analysis').innerHTML = targetMatches > 0 
+      ? `<span style="color:#34d399">✓ Target seller appeared in ${targetMatches} event(s)</span>`
+      : `<span style="color:#f85149">✗ Target seller NOT found</span><br>
+         All ${events.length} events show buyer <code>0xc8f87fe6...047e90</code> authorizing different sellers.<br>
+         No direct interaction with target seller detected.`;
+  })
+  .catch(err => {
+    document.getElementById('summary-text').innerHTML = `<span style="color:#f85149">Error loading data: ${err.message}</span>`;
+  });
+</script>
+</body>
+</html>
